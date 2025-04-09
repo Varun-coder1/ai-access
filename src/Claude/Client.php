@@ -16,7 +16,7 @@ use AIAccess\Http;
 /**
  * Client implementation for accessing Anthropic Claude API models.
  */
-final class Client implements AIAccess\Client
+final class Client implements AIAccess\Client, AIAccess\BatchFeature
 {
 	/** @var array<string, mixed> */
 	private array $options = [];
@@ -37,6 +37,73 @@ final class Client implements AIAccess\Client
 	public function createChat(string $model): Chat
 	{
 		return new Chat($this, $model);
+	}
+
+
+	/**
+	 * Creates a new batch job container.
+	 */
+	public function createBatch(): Batch
+	{
+		return new Batch($this);
+	}
+
+
+	/**
+	 * Lists existing batch jobs.
+	 * @param  ?int  $limit  Maximum number of jobs to return
+	 * @param  ?string  $after  Cursor for pagination (retrieve the page after this batch ID)
+	 * @param  ?string  $before  Cursor for pagination (retrieve the page before this batch ID)
+	 * @return BatchResponse[]
+	 */
+	public function listBatches(?int $limit = null, ?string $after = null, ?string $before = null): array
+	{
+		$endpoint = 'v1/messages/batches';
+		$params = array_filter([
+			'limit' => $limit,
+			'after_id' => $after,
+			'before_id' => $before,
+		], fn($v) => $v !== null);
+
+		if ($params) {
+			$endpoint .= '?' . http_build_query($params);
+		}
+
+		$response = $this->sendRequest($endpoint, [], 'GET');
+		$res = [];
+		if (is_array($response['data'] ?? null)) {
+			foreach ($response['data'] as $batchData) {
+				$res[] = new BatchResponse($this, $batchData);
+			}
+		}
+		return $res;
+	}
+
+
+	/**
+	 * Retrieves the current status and details of a specific batch job by its ID.
+	 */
+	public function retrieveBatch(string $id): BatchResponse
+	{
+		$rawResponse = $this->sendRequest("v1/messages/batches/{$id}", [], 'GET');
+		return new BatchResponse($this, $rawResponse);
+	}
+
+
+	/**
+	 * Attempts to cancel a batch job that is currently in progress.
+	 * @return bool True if cancellation was initiated successfully, false otherwise
+	 */
+	public function cancelBatch(string $id): bool
+	{
+		try {
+			$response = $this->sendRequest("v1/messages/batches/{$id}/cancel", []);
+			return isset($response['cancel_initiated_at']) && $response['cancel_initiated_at'] !== null;
+		} catch (AIAccess\ApiException $e) {
+			// Handle case where batch can't be cancelled (e.g., already completed)
+			trigger_error("Failed to cancel batch job {$id}: " . $e->getMessage(), E_USER_WARNING);
+			return false;
+		}
 	}
 
 
@@ -80,9 +147,14 @@ final class Client implements AIAccess\Client
 	 * @throws AIAccess\ApiException On API errors.
 	 * @throws AIAccess\NetworkException On connection problems.
 	 */
-	public function sendRequest(string $endpoint, array $payload, string $method = 'POST'): mixed
+	public function sendRequest(
+		string $endpoint,
+		array $payload,
+		string $method = 'POST',
+		bool $parseJson = true,
+	): mixed
 	{
-		$url = $this->baseUrl . ltrim($endpoint, '/');
+		$url = str_starts_with($endpoint, 'http') ? $endpoint : $this->baseUrl . ltrim($endpoint, '/');
 		$body = null;
 
 		if (!empty($payload) && $method !== 'GET') {
@@ -109,6 +181,10 @@ final class Client implements AIAccess\Client
 				"Claude API error (HTTP {$statusCode})"));
 
 			throw new AIAccess\ApiException($errorMessage, $statusCode);
+		}
+
+		if (!$parseJson) {
+			return $responseBody;
 		}
 
 		try {

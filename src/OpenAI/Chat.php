@@ -90,8 +90,9 @@ final class Chat extends AIAccess\Chat
 
 	/**
 	 * Builds the payload for the OpenAI API responses request.
+	 * @internal
 	 */
-	private function buildPayload(): array
+	public function buildPayload(): array
 	{
 		if (empty($this->messages)) {
 			throw new AIAccess\LogicException('Cannot send request with empty message history.');

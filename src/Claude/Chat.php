@@ -65,8 +65,9 @@ final class Chat extends AIAccess\Chat
 
 	/**
 	 * Builds the payload for the Claude API messages request.
+	 * @internal
 	 */
-	private function buildPayload(): array
+	public function buildPayload(): array
 	{
 		if (!$this->messages) {
 			throw new AIAccess\LogicException('Cannot send request with empty message history.');

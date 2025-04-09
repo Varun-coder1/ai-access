@@ -213,6 +213,120 @@ Always refer to the specific `Chat` class implementation (`src/<Vendor>/Chat.php
 
  <!---->
 
+Batch Processing
+================
+
+For processing a large number of independent chat requests asynchronously, often at a lower cost, use the Batch API (supported by OpenAI and Claude). This is ideal when you don't need immediate responses, as processing can take significant time (minutes to potentially 24 hours, depending on the provider and queue load).
+
+**Note:** Grok (xAI), DeepSeek, and Gemini do not currently support a batch API via this library.
+
+**Concept:**
+1.  Create batch using `Client::createBatch()`
+2.  Create multiple `Chat` objects using `Batch::createChat()`, each configured with its own model, messages, system instructions, and options (using `addMessage`, `setSystemInstruction`, `setOptions` just like interactive chat). Assign a unique `customId` to each.
+3.  `submit()` the entire `Batch` container at once. This queues the jobs for background processing. **It does not send messages interactively.**
+4.  Store the returned `batchId`.
+5.  **Handle Asynchronously:** Use a separate mechanism (cron job, queue worker, webhook) to check the job status later using `retrieveBatch($batchId)`.
+6.  Once your checking mechanism confirms the job `status` is `Completed`, use `getOutputMessages()` to get the results, mapped by `customId`.
+
+**Example: Preparing and Submitting the Batch**
+
+```php
+use AIAccess\Role;
+
+$model = '...'; // Choose a model compatible with the $client
+
+// 1. Create a batch
+$batch = $client->createBatch();
+
+// 2. Add individual chat requests
+$chat1 = $batch->createChat($model, 'request-greeting-1');
+$chat1->setSystemInstruction('Be brief and friendly.');
+$chat1->addMessage('Hi!', Role::User);
+
+$chat2 = $batch->createChat($model, 'request-translate-fr');
+$chat2->setSystemInstruction('Translate the user message to French.');
+$chat2->addMessage('Hello world', Role::User);
+
+$chat3 = $batch->createChat($model, 'request-code-explain');
+$chat3->addMessage('Explain what this PHP code does: `echo "Hello";`', Role::User);
+
+// 3. Submit the batch job
+echo "Submitting batch job with 3 requests...\n";
+$batchResponse = $batch->submit(); // Returns immediately
+
+$batchId = $batchResponse->getId();
+echo "Batch job submitted with ID: " . $batchId . "\n";
+echo "Initial status: " . $batchResponse->getStatus()->name . "\n";
+```
+
+Now, store the `$batchId` (e.g., in a database, queue message) associated with the task or user who initiated it.
+
+Handling Asynchronous Completion
+--------------------------------
+
+You need a separate process (cron, queue worker, etc.) to check the status later using the stored `batchId`.
+
+```php
+use AIAccess\BatchStatus;
+
+// --- In your separate checking script/job ---
+// $batchIdToCheck = ...; // Retrieve the ID from storage
+// $client = ...; // Re-initialize the appropriate client
+
+$currentBatch = $client->retrieveBatch($batchIdToCheck);
+$status = $currentBatch->getStatus();
+
+if ($status === BatchStatus::Completed) {
+	// Mark job as complete, trigger result processing
+	echo "Batch $batchIdToCheck completed.\n";
+
+} elseif ($status === BatchStatus::Failed) {
+	// Mark job as failed, log error
+	$errorDetails = $currentBatch->getError();
+	echo "Batch $batchIdToCheck failed: " . ($errorDetails ?? 'Unknown error') . "\n";
+
+} else { // InProgress or Other
+	// Job is still running, check again later based on your schedule
+	echo "Batch $batchIdToCheck is still in status: " . $status->name . "\n";
+}
+```
+
+Retrieve Results (After Confirmation)
+-------------------------------------
+
+Once your asynchronous checking mechanism confirms that a batch job's status is `BatchStatus::Completed`, you can retrieve the results. This might happen within the checking job itself or in a separate process triggered upon completion.
+
+```php
+// Assuming $currentBatch is the COMPLETED BatchResponse object
+echo "Retrieving Results for Completed Batch ID: " . $currentBatch->getId() . " ---\n";
+
+$outputMessages = $currentBatch->getOutputMessages(); // Returns ?array<string, AIAccess\Message>
+
+if ($outputMessages === null) {
+	echo "Could not retrieve or parse output messages.\n";
+	// Inspect raw result: print_r($currentBatch->getRawResult());
+	return;
+}
+
+echo "Retrieved " . count($outputMessages) . " results:\n\n";
+foreach ($outputMessages as $customId => $message) {
+	echo "Result for Request ID: '$customId' ---\n";
+	echo $message->getText() . "\n";
+	// Process the result
+}
+```
+
+**Batch API Differences & Abstraction:**
+
+While the underlying mechanisms for batch processing differ significantly between providers, **you don't need to worry about these details when using AIAccess.** The library completely abstracts these differences away. When you call the `$batch->submit()` method:
+
+*   If using the `AIAccess\OpenAI\Client`, the library automatically formats your chat requests into the required JSONL structure, uploads the file to OpenAI, and initiates the batch job using the returned file ID.
+*   If using the `AIAccess\Claude\Client`, the library sends the prepared chat payloads directly in the batch creation request.
+
+Thanks to this abstraction, you benefit from a **consistent and simplified workflow** for submitting batch jobs, regardless of the chosen backend provider (among those that support batch).
+
+ <!---->
+
 Embeddings
 ==========
 

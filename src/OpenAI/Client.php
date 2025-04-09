@@ -16,7 +16,7 @@ use AIAccess\Http;
 /**
  * Client implementation for accessing OpenAI API models.
  */
-final class Client implements AIAccess\Client, AIAccess\EmbeddingFeature
+final class Client implements AIAccess\Client, AIAccess\EmbeddingFeature, AIAccess\BatchFeature
 {
 	/** @var array<string, mixed> */
 	private array $options = [];
@@ -37,6 +37,70 @@ final class Client implements AIAccess\Client, AIAccess\EmbeddingFeature
 	public function createChat(string $model): Chat
 	{
 		return new Chat($this, $model);
+	}
+
+
+	/**
+	 * Creates a new batch job container.
+	 */
+	public function createBatch(): Batch
+	{
+		return new Batch($this);
+	}
+
+
+	/**
+	 * Lists existing batch jobs.
+	 * @param  ?int  $limit  Maximum number of jobs to return
+	 * @param  ?string  $after  Cursor for pagination (retrieve the page after this batch ID)
+	 * @return BatchResponse[]
+	 */
+	public function listBatches(?int $limit = null, ?string $after = null): array
+	{
+		$endpoint = 'batches';
+		$params = array_filter([
+			'limit' => $limit,
+			'after' => $after,
+		], fn($v) => $v !== null);
+
+		if ($params) {
+			$endpoint .= '?' . http_build_query($params);
+		}
+
+		$response = $this->sendRequest($endpoint, null, 'GET');
+		$res = [];
+		if (is_array($response['data'] ?? null)) {
+			foreach ($response['data'] as $batchData) {
+				$res[] = new BatchResponse($this, $batchData);
+			}
+		}
+		return $res;
+	}
+
+
+	/**
+	 * Retrieves the current status and details of a specific batch job by its ID.
+	 */
+	public function retrieveBatch(string $id): BatchResponse
+	{
+		$rawResponse = $this->sendRequest("batches/{$id}", null, 'GET');
+		return new BatchResponse($this, $rawResponse);
+	}
+
+
+	/**
+	 * Attempts to cancel a batch job that is currently in progress.
+	 * @return bool True if cancellation was initiated successfully, false otherwise
+	 */
+	public function cancelBatch(string $id): bool
+	{
+		try {
+			$response = $this->sendRequest("batches/{$id}/cancel", null, 'POST');
+			return $response['status'] === 'cancelling';
+		} catch (AIAccess\ApiException $e) {
+			trigger_error("Failed to cancel batch job {$id}: " . $e->getMessage(), E_USER_WARNING);
+			return false;
+		}
 	}
 
 
@@ -88,6 +152,72 @@ final class Client implements AIAccess\Client, AIAccess\EmbeddingFeature
 		}
 
 		return $results;
+	}
+
+
+	/**
+	 * Uploads a file to the OpenAI API.
+	 * @throws AIAccess\ApiException  On API errors.
+	 * @throws AIAccess\NetworkException  On connection problems.
+	 */
+	public function uploadContent(string $content, string $filename, string $purpose, ?string $mimeType = null): string
+	{
+		$tmpFile = tmpfile();
+		if ($tmpFile === false) {
+			throw new AIAccess\NetworkException('Failed to create temporary file for upload.');
+		}
+
+		try {
+			fwrite($tmpFile, $content);
+			fseek($tmpFile, 0);
+
+			$metaData = stream_get_meta_data($tmpFile);
+			$filePath = $metaData['uri'];
+			$boundary = '----' . md5(uniqid());
+			$body = '';
+			$body .= "--$boundary\r\n";
+			$body .= "Content-Disposition: form-data; name=\"purpose\"\r\n\r\n";
+			$body .= "$purpose\r\n";
+			$body .= "--$boundary\r\n";
+			$body .= "Content-Disposition: form-data; name=\"file\"; filename=\"$filename\"\r\n";
+			if ($mimeType) {
+				$body .= "Content-Type: $mimeType\r\n";
+			}
+			$body .= "\r\n";
+			$body .= file_get_contents($filePath);
+			$body .= "\r\n";
+			$body .= "--$boundary--\r\n";
+			$additionalHeaders = [
+				'Content-Type' => "multipart/form-data; boundary=$boundary",
+			];
+
+			$response = $this->sendRequest('files', $body, 'POST', $additionalHeaders);
+			return $response['id'];
+
+		} finally {
+			fclose($tmpFile);
+		}
+	}
+
+
+	/**
+	 * Uploads a file from a local path to the OpenAI API.
+	 * @throws AIAccess\ApiException  On API errors.
+	 * @throws AIAccess\NetworkException  On connection problems.
+	 */
+	public function uploadFile(string $filePath, string $purpose, ?string $mimeType = null): string
+	{
+		if (!file_exists($filePath) || !is_readable($filePath)) {
+			throw new AIAccess\NetworkException("File not found or not readable: $filePath");
+		}
+
+		$filename = basename($filePath);
+		$content = file_get_contents($filePath);
+		if ($content === false) {
+			throw new AIAccess\NetworkException("Failed to read file content: $filePath");
+		}
+
+		return $this->uploadContent($content, $filename, $purpose, $mimeType);
 	}
 
 
@@ -165,7 +295,12 @@ final class Client implements AIAccess\Client, AIAccess\EmbeddingFeature
 
 		$decodedBody = null;
 		if ($statusCode < 400 && $responseBody !== '') {
-			$decodedBody = json_decode($responseBody, true, 512, JSON_THROW_ON_ERROR);
+			try {
+				$decodedBody = json_decode($responseBody, true, 512, JSON_THROW_ON_ERROR);
+			} catch (\JsonException) {
+				// Raw response content, not JSON
+				return $responseBody;
+			}
 		}
 
 		if ($statusCode >= 400) {
