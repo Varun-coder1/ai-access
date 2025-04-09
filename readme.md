@@ -213,6 +213,88 @@ Always refer to the specific `Chat` class implementation (`src/<Vendor>/Chat.php
 
  <!---->
 
+Embeddings
+==========
+
+Embeddings transform text into numerical vectors (arrays of floating-point numbers), capturing semantic meaning. These vectors allow machines to understand relationships between texts. Embeddings are fundamental for tasks like:
+
+*   **Semantic Search:** Find documents relevant by meaning, not just keywords.
+*   **Clustering:** Group similar documents together.
+*   **Recommendations:** Suggest items based on content similarity.
+*   **Retrieval-Augmented Generation (RAG):** Provide relevant context to language models before generating answers.
+
+AIAccess provides a common interface (`calculateEmbeddings`) for generating these vectors using supported providers like OpenAI and Gemini.
+
+**Note:** Claude, DeepSeek, and Grok (xAI) do not currently offer embedding endpoints through this library.
+
+```php
+// Assuming $client is initialized (must be OpenAI\Client or Gemini\Client)
+
+// $embeddingModel = 'text-embedding-3-small'; // OpenAI Example
+$embeddingModel = 'embedding-001'; // Gemini Example
+
+$textsToEmbed = [
+	'The quick brown fox jumps over the lazy dog.',
+	'PHP is a popular general-purpose scripting language.',
+	'Paris is the capital of France.',
+];
+
+echo "Calculating embeddings for " . count($textsToEmbed) . " texts using model: " . $embeddingModel . "\n";
+
+$results = $client->calculateEmbeddings(
+	model: $embeddingModel,
+	input: $textsToEmbed,
+	// Provider-specific options go here as named arguments
+);
+```
+
+The `calculateEmbeddings()` method returns an array of `AIAccess\Embedding` objects, one for each input text. Each `Embedding` object contains the numerical vector representing the text's semantic meaning. You can then iterate through these results to use the vectors, for example, to calculate similarities or store them for later use.
+
+```php
+// Assuming $results is the array returned from calculateEmbeddings
+echo "Received " . count($results) . " embeddings.\n";
+
+foreach ($results as $index => $embedding) {
+	echo "Embedding for text " . ($index + 1) . ": \"" . $textsToEmbed[$index] . "\"\n";
+	$vector = $embedding->getVector();
+	echo "Dimension: " . count($vector) . "\n";
+	echo "First 5 values: [" . implode(', ', array_slice($vector, 0, 5)) . ", ...]\n";
+
+	// Example: Calculate similarity with the first embedding
+	if ($index > 0) {
+		$similarity = $results[0]->cosineSimilarity($embedding);
+		echo "Cosine Similarity with first text: " . number_format($similarity, 4) . "\n";
+	}
+}
+```
+
+You can serialize embeddings for efficient storage:
+
+```php
+use AIAccess\Embedding;
+
+$binaryData = $results[0]->serialize();
+// Store $binaryData in a database (e.g., BLOB column)
+
+// Later, retrieve and deserialize:
+$embeddingObject = Embedding::deserialize($retrievedBinaryData);
+$vector = $embeddingObject->getVector();
+```
+
+**Embedding API Options:**
+
+Pass these as additional named arguments to `calculateEmbeddings` when using the specific client:
+
+*   **OpenAI** [OpenAI Embeddings API Reference](https://platform.openai.com/docs/api-reference/embeddings/create)
+	*   `dimensions` (int): Optional. Request specific vector size (e.g., 256) for `text-embedding-3-*` models.
+
+*   **Gemini** [Google AI Gemini API Reference (batchEmbedContents)](https://ai.google.dev/api/rest/v1beta/models/batchEmbedContents)
+	*   `taskType` (string): Optional. Hint for use case (e.g., `RETRIEVAL_QUERY`, `RETRIEVAL_DOCUMENT`).
+	*   `title` (string): Optional. Title when `taskType` is `RETRIEVAL_DOCUMENT`.
+	*   `outputDimensionality` (int): Optional. Request specific dimensions.
+
+ <!---->
+
 Error Handling
 ==============
 

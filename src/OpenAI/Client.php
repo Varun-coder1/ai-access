@@ -16,7 +16,7 @@ use AIAccess\Http;
 /**
  * Client implementation for accessing OpenAI API models.
  */
-final class Client implements AIAccess\Client
+final class Client implements AIAccess\Client, AIAccess\EmbeddingFeature
 {
 	/** @var array<string, mixed> */
 	private array $options = [];
@@ -37,6 +37,57 @@ final class Client implements AIAccess\Client
 	public function createChat(string $model): Chat
 	{
 		return new Chat($this, $model);
+	}
+
+
+	/**
+	 * Calculates embeddings for the given input text(s) using a specified OpenAI model.
+	 * @param  ?int  $dimensions  The number of dimensions the resulting output embeddings should have. Only supported for 'text-embedding-3' models
+	 * @return AIAccess\Embedding[]
+	 * @throws AIAccess\Exception
+	 */
+	public function calculateEmbeddings(string $model, array $input, ?int $dimensions = null): array
+	{
+		if (empty($input)) {
+			throw new AIAccess\LogicException('Input cannot be empty.');
+		}
+		foreach ($input as $text) {
+			if (!is_string($text) || $text === '') {
+				throw new AIAccess\LogicException('All input elements must be non-empty strings.');
+			}
+		}
+
+		$payload = [
+			'model' => $model,
+			'input' => $input,
+		];
+		if ($dimensions !== null) {
+			if (!str_contains($model, 'text-embedding-3')) {
+				trigger_error("The 'dimensions' parameter is only supported for text-embedding-3 models.", E_USER_WARNING);
+			}
+			$payload['dimensions'] = $dimensions;
+		}
+
+		$response = $this->sendRequest('embeddings', $payload);
+
+		$results = [];
+		if (isset($response['data']) && is_array($response['data'])) {
+			usort($response['data'], fn($a, $b) => $a['index'] <=> $b['index']);
+
+			foreach ($response['data'] as $data) {
+				if (is_array($data['embedding'] ?? null)) {
+					$results[] = new AIAccess\Embedding($data['embedding']);
+				} elseif (isset($data['error'])) {
+					trigger_error("Error processing input at index {$data['index']}: " . ($data['error']['message'] ?? 'Unknown error'), E_USER_WARNING);
+				}
+			}
+		}
+
+		if (count($results) !== count($input)) {
+			trigger_error('Number of returned embeddings (' . count($results) . ') does not match the number of inputs (' . count($input) . '). Check for errors in the raw response.', E_USER_WARNING);
+		}
+
+		return $results;
 	}
 
 

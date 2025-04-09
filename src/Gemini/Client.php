@@ -16,7 +16,7 @@ use AIAccess\Http;
 /**
  * Client implementation for accessing Google Gemini API models.
  */
-final class Client implements AIAccess\Client
+final class Client implements AIAccess\Client, AIAccess\EmbeddingFeature
 {
 	/** @var array<string, mixed> */
 	private array $options = [];
@@ -36,6 +36,64 @@ final class Client implements AIAccess\Client
 	public function createChat(string $model): Chat
 	{
 		return new Chat($this, $model);
+	}
+
+
+	/**
+	 * Calculates embeddings using Gemini models via the batch endpoint.
+	 * @param  ?string  $taskType Optional task type hint (e.g., RETRIEVAL_QUERY, RETRIEVAL_DOCUMENT)
+	 * @param  ?string  $title Optional title if taskType is RETRIEVAL_DOCUMENT
+	 * @param  ?int  $outputDimensionality Optional request for specific embedding dimensions
+	 * @return AIAccess\Embedding[]
+	 * @throws AIAccess\Exception
+	 */
+	public function calculateEmbeddings(
+		string $model,
+		array $input,
+		?string $taskType = null,
+		?string $title = null,
+		?int $outputDimensionality = null,
+	): array
+	{
+		if (empty($input)) {
+			return [];
+		}
+
+		$requests = [];
+		foreach ($input as $text) {
+			if (!is_string($text) || $text === '') {
+				throw new AIAccess\LogicException('All input elements must be non-empty strings.');
+			}
+			$content = ['parts' => [['text' => $text]]];
+			$request = ['model' => "models/$model", 'content' => $content];
+
+			if ($taskType !== null) {
+				$request['taskType'] = $taskType;
+			}
+			if ($title !== null && $taskType === 'RETRIEVAL_DOCUMENT') {
+				$request['title'] = $title;
+			}
+			if ($outputDimensionality !== null) {
+				$request['outputDimensionality'] = $outputDimensionality;
+			}
+
+			$requests[] = $request;
+		}
+
+		$response = $this->sendRequest("models/{$model}:batchEmbedContents", ['requests' => $requests]);
+		$results = [];
+		if (isset($response['embeddings']) && is_array($response['embeddings'])) {
+			foreach ($response['embeddings'] as $index => $data) {
+				if (isset($data['values']) && is_array($data['values'])) {
+					$results[$index] = new AIAccess\Embedding($data['values']);
+				}
+			}
+		}
+
+		if (count($results) !== count($input)) {
+			trigger_error('Number of returned embeddings does not match the number of inputs.', E_USER_WARNING);
+		}
+		return $results;
 	}
 
 
