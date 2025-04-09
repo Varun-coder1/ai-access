@@ -53,6 +53,17 @@ final class Chat extends AIAccess\Chat
 
 
 	/**
+	 * Counts tokens for the current chat history, system instruction.
+	 */
+	public function countTokens(): int
+	{
+		$payload = $this->buildPayload();
+		$payload = array_intersect_key($payload, array_flip(['model', 'messages', 'system']));
+		return $this->client->sendRequest('v1/messages/count_tokens', $payload)['input_tokens'];
+	}
+
+
+	/**
 	 * Generates the next response based on the current chat history and settings.
 	 */
 	protected function generateResponse(): Response
